@@ -226,9 +226,7 @@
   <div class="find-box">
 
     <div class="ble-notice" id="ble-notice">
-      <strong>ℹ️ Web Bluetooth</strong> — This site scans nearby BLE devices using your browser's Bluetooth.
-      Requires <strong>Chrome / Edge</strong> with BLE scanning enabled.
-      Go to <strong>chrome://flags/#enable-experimental-web-platform-features</strong> → Enable → Relaunch.
+      <strong>⏳ Detecting scan mode...</strong>
     </div>
 
     <div class="find-input-row">
@@ -313,40 +311,37 @@
 let findInterval = null;
 let knownDevices = [];
 let audioCtx = null;
-let scanActive = null;       // active BLE scan object
-let findScanActive = null;   // active BLE scan for find tab
 
-// ── BLE constants ───────────────────────────────────────────
-const TX_POWER = -59;
-const PATH_LOSS_EXP = 2.5;
-const SCAN_DURATION = 4000;  // 4 seconds, same as localhost:5006
+// ── Backend detection ───────────────────────────────────────
+// Try localhost:5006 first (your Python app.py), fall back to Web Bluetooth
+const LOCAL_API = 'http://localhost:5006';
+let useLocalAPI = false;
 
-function estimateDistance(rssi) {
-  if (rssi >= 0) return 0;
-  return Math.pow(10, (TX_POWER - rssi) / (10 * PATH_LOSS_EXP));
+async function detectBackend() {
+  const notice = document.getElementById('ble-notice');
+  try {
+    const res = await fetch(LOCAL_API + '/api/history', { method: 'GET', signal: AbortSignal.timeout(2000) });
+    const data = await res.json();
+    if (data.ok) {
+      useLocalAPI = true;
+      notice.innerHTML = '<strong>✅ Connected to local scanner</strong> — Using your computer\'s Bluetooth via localhost:5006. Full scanning enabled!';
+      notice.style.borderColor = 'var(--accent2)';
+      notice.style.background = 'rgba(34,197,94,0.1)';
+      return;
+    }
+  } catch(e) {}
+
+  // No local backend — show instructions
+  useLocalAPI = false;
+  notice.innerHTML =
+    '<strong>💡 For full scanning</strong> — Run <code style="background:var(--card);padding:2px 8px;border-radius:4px;">python app.py</code> on your computer, ' +
+    'then refresh this page. The website will automatically use your local Bluetooth to scan all devices.<br>' +
+    '<span style="font-size:0.8rem;margin-top:4px;display:inline-block;">Without the local scanner, only the browser\'s device picker is available (one device at a time).</span>';
+  notice.style.borderColor = '#eab308';
+  notice.style.background = 'rgba(234,179,8,0.1)';
 }
 
-// ── Check Web Bluetooth support ─────────────────────────────
-const hasBLE = !!navigator.bluetooth;
-const hasLEScan = hasBLE && !!navigator.bluetooth.requestLEScan;
-
-if (!hasBLE) {
-  document.getElementById('ble-notice').innerHTML =
-    '<strong>⚠️ Web Bluetooth not supported</strong> — Please use <strong>Chrome</strong> or <strong>Edge</strong>.';
-  document.getElementById('ble-notice').style.borderColor = 'var(--danger)';
-  document.getElementById('ble-notice').style.background = 'rgba(239,68,68,0.1)';
-  document.getElementById('btn-find').disabled = true;
-  document.getElementById('btn-scan').disabled = true;
-} else if (!hasLEScan) {
-  document.getElementById('ble-notice').innerHTML =
-    '<strong>⚠️ BLE Scanning not enabled</strong> — To scan all devices automatically like the local version:<br>' +
-    '1. Open <strong>chrome://flags/#enable-experimental-web-platform-features</strong><br>' +
-    '2. Set to <strong>Enabled</strong><br>' +
-    '3. Click <strong>Relaunch</strong><br>' +
-    'Without this, only the device picker (one device at a time) is available.';
-  document.getElementById('ble-notice').style.borderColor = '#eab308';
-  document.getElementById('ble-notice').style.background = 'rgba(234,179,8,0.1)';
-}
+detectBackend();
 
 // ── Tabs ─────────────────────────────────────────────────────
 document.querySelectorAll('.tab').forEach(tab => {
@@ -382,10 +377,6 @@ function distLabel(d) {
   return d.toFixed(0) + ' m (Far)';
 }
 
-function timeStr() {
-  return new Date().toLocaleTimeString('en-US', { hour12: false });
-}
-
 function beep(freq, duration) {
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -400,137 +391,87 @@ function beep(freq, duration) {
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
-// ── Render the scan table ───────────────────────────────────
-function renderTable() {
-  const tbody = document.getElementById('scan-tbody');
-  const sorted = [...knownDevices].sort((a, b) => b.rssi - a.rssi);
-  tbody.innerHTML = '';
-  sorted.forEach(d => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td><strong>${esc(d.name)}</strong></td>
-      <td style="font-family:monospace;font-size:0.8rem;">${esc(d.address)}</td>
-      <td>${d.rssi > -999 ? d.rssi : 'N/A'}</td>
-      <td>${d.rssi > -999 ? signalBar(d.rssi) : ''}</td>
-      <td>${d.rssi > -999 ? conditionBadge(d.rssi) : ''}</td>
-      <td>${distLabel(d.distance)}</td>
-      <td>${d.last_seen}</td>
-      <td><button class="select-btn" onclick="trackDevice('${esc(d.name === '(Unknown)' ? d.address : d.name)}')">Track</button></td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
 // ══════════════════════════════════════════════════════════════
 // ── Scan All Devices ─────────────────────────────────────────
 // ══════════════════════════════════════════════════════════════
 async function scanAll() {
   const btn = document.getElementById('btn-scan');
+  const tbody = document.getElementById('scan-tbody');
   const countEl = document.getElementById('scan-count');
 
-  if (!hasBLE) {
-    countEl.textContent = '❌ Web Bluetooth not supported';
-    return;
-  }
-
   btn.disabled = true; btn.textContent = '⏳ Scanning...';
+  countEl.textContent = 'Scanning (~4s)...';
 
-  // ── Method 1: requestLEScan (scans ALL devices, like localhost:5006)
-  if (hasLEScan) {
-    countEl.textContent = 'Scanning (~4s)...';
-    const scannedDevices = {};
-
-    // Listen for all advertisements
-    const onAdv = (event) => {
-      const device = event.device;
-      const addr = device.id || 'unknown';
-      const rssi = event.rssi != null ? event.rssi : -999;
-      const dist = rssi > -999 ? Math.round(estimateDistance(rssi) * 10) / 10 : -1;
-      scannedDevices[addr] = {
-        name: device.name || '(Unknown)',
-        address: addr,
-        rssi: rssi,
-        distance: dist,
-        last_seen: timeStr()
-      };
-    };
-
-    navigator.bluetooth.addEventListener('advertisementreceived', onAdv);
-
+  // ── LOCAL API (same as localhost:5006) ──────────────────────
+  if (useLocalAPI) {
     try {
-      scanActive = await navigator.bluetooth.requestLEScan({
-        acceptAllAdvertisements: true
+      const res = await fetch(LOCAL_API + '/api/scan', { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
+
+      knownDevices = data.devices;
+      updateChips();
+
+      tbody.innerHTML = '';
+      data.devices.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${esc(d.name)}</strong></td>
+          <td style="font-family:monospace;font-size:0.8rem;">${esc(d.address)}</td>
+          <td>${d.rssi > -999 ? d.rssi : 'N/A'}</td>
+          <td>${d.rssi > -999 ? signalBar(d.rssi) : ''}</td>
+          <td>${d.rssi > -999 ? conditionBadge(d.rssi) : ''}</td>
+          <td>${distLabel(d.distance)}</td>
+          <td>${d.last_seen}</td>
+          <td><button class="select-btn" onclick="trackDevice('${esc(d.name === '(Unknown)' ? d.address : d.name)}')">Track</button></td>
+        `;
+        tbody.appendChild(tr);
       });
 
-      // Scan for SCAN_DURATION ms then stop (same as Flask's 4s)
-      await new Promise(resolve => setTimeout(resolve, SCAN_DURATION));
-      scanActive.stop();
-      scanActive = null;
+      countEl.textContent = `Found ${data.count} devices`;
     } catch(e) {
-      countEl.textContent = '❌ ' + e.message;
-      btn.disabled = false; btn.textContent = '📡 Scan Now';
-      navigator.bluetooth.removeEventListener('advertisementreceived', onAdv);
-      return;
+      // If local API fails, mark it unavailable and retry with fallback
+      useLocalAPI = false;
+      countEl.textContent = '❌ Lost connection to local scanner: ' + e.message;
+      detectBackend();
     }
 
-    navigator.bluetooth.removeEventListener('advertisementreceived', onAdv);
-
-    // Merge into knownDevices (update existing, add new)
-    for (const [addr, dev] of Object.entries(scannedDevices)) {
-      const idx = knownDevices.findIndex(d => d.address === addr);
-      if (idx >= 0) knownDevices[idx] = dev;
-      else knownDevices.push(dev);
-    }
-
-    updateChips();
-    renderTable();
-    countEl.textContent = `Found ${Object.keys(scannedDevices).length} devices (${knownDevices.length} total)`;
-
-  // ── Method 2: Fallback to requestDevice picker (one at a time)
-  } else {
+  // ── WEB BLUETOOTH FALLBACK ─────────────────────────────────
+  } else if (navigator.bluetooth) {
     countEl.textContent = 'Select a device from the picker...';
-
     try {
       const device = await navigator.bluetooth.requestDevice({
-        acceptAllDevices: true,
-        optionalServices: []
+        acceptAllDevices: true, optionalServices: []
       });
-
       const name = device.name || '(Unknown)';
       const id = device.id || 'N/A';
-      let rssi = -999, distance = -1;
-
-      // Try watchAdvertisements for RSSI
-      if (device.watchAdvertisements) {
-        try {
-          const ac = new AbortController();
-          const p = new Promise(resolve => {
-            device.addEventListener('advertisementreceived', (ev) => {
-              rssi = ev.rssi || -999;
-              distance = rssi > -999 ? Math.round(estimateDistance(rssi) * 10) / 10 : -1;
-              ac.abort(); resolve();
-            });
-            setTimeout(() => { ac.abort(); resolve(); }, 5000);
-          });
-          await device.watchAdvertisements({ signal: ac.signal }).catch(() => {});
-          await p;
-        } catch(e) {}
-      }
-
-      const entry = { name, address: id, rssi, distance, last_seen: timeStr() };
+      const entry = { name, address: id, rssi: -999, distance: -1, last_seen: new Date().toLocaleTimeString('en-US',{hour12:false}) };
       const idx = knownDevices.findIndex(d => d.address === id);
-      if (idx >= 0) knownDevices[idx] = entry;
-      else knownDevices.push(entry);
+      if (idx >= 0) knownDevices[idx] = entry; else knownDevices.push(entry);
       updateChips();
-      renderTable();
-      countEl.textContent = `${knownDevices.length} device(s) — click Scan Now again to add more`;
+
+      tbody.innerHTML = '';
+      knownDevices.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${esc(d.name)}</strong></td>
+          <td style="font-family:monospace;font-size:0.8rem;">${esc(d.address)}</td>
+          <td>${d.rssi > -999 ? d.rssi : 'N/A'}</td>
+          <td>${d.rssi > -999 ? signalBar(d.rssi) : ''}</td>
+          <td>${d.rssi > -999 ? conditionBadge(d.rssi) : ''}</td>
+          <td>${distLabel(d.distance)}</td>
+          <td>${d.last_seen}</td>
+          <td><button class="select-btn" onclick="trackDevice('${esc(d.name === '(Unknown)' ? d.address : d.name)}')">Track</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+      countEl.textContent = `${knownDevices.length} device(s) — scan again to add more`;
     } catch(e) {
-      if (e.name === 'NotFoundError') {
-        countEl.textContent = 'Cancelled. ' + knownDevices.length + ' device(s) in list.';
-      } else {
-        countEl.textContent = '❌ ' + e.message;
-      }
+      if (e.name !== 'NotFoundError') countEl.textContent = '❌ ' + e.message;
+      else countEl.textContent = 'Cancelled.';
     }
+  } else {
+    countEl.textContent = '❌ Bluetooth not available in this browser';
   }
 
   btn.disabled = false; btn.textContent = '📡 Scan Now';
@@ -539,7 +480,7 @@ async function scanAll() {
 // ── Track from scan table ────────────────────────────────────
 function trackDevice(name) {
   document.getElementById('find-query').value = name;
-  document.querySelectorAll('.tab')[0].click(); // switch to Find tab
+  document.querySelectorAll('.tab')[0].click();
   startFinding();
 }
 
@@ -549,12 +490,6 @@ function trackDevice(name) {
 function startFinding() {
   const query = document.getElementById('find-query').value.trim();
   if (!query) { alert('Please enter a device name or MAC address'); return; }
-
-  if (!hasBLE) {
-    document.getElementById('find-status').innerHTML =
-      '<div class="status-msg not-found">❌ Web Bluetooth not supported</div>';
-    return;
-  }
 
   document.getElementById('btn-find').style.display = 'none';
   document.getElementById('btn-stop').style.display = '';
@@ -567,7 +502,6 @@ function startFinding() {
 
 function stopFinding() {
   clearInterval(findInterval); findInterval = null;
-  if (findScanActive) { try { findScanActive.stop(); } catch(e) {} findScanActive = null; }
   document.getElementById('btn-find').style.display = '';
   document.getElementById('btn-stop').style.display = 'none';
   document.getElementById('find-query').disabled = false;
@@ -586,187 +520,104 @@ async function doFindScan(query) {
 
   statusEl.innerHTML = '<div class="status-msg searching">🔍 Scanning... please wait ~4 seconds</div>';
 
-  // ── Method 1: requestLEScan — scan all, then filter by query
-  if (hasLEScan) {
-    const scannedDevices = {};
-    const onAdv = (event) => {
-      const device = event.device;
-      const addr = device.id || 'unknown';
-      const rssi = event.rssi != null ? event.rssi : -999;
-      const dist = rssi > -999 ? Math.round(estimateDistance(rssi) * 10) / 10 : -1;
-      scannedDevices[addr] = {
-        name: device.name || '(Unknown)',
-        address: addr,
-        rssi: rssi,
-        distance: dist,
-        last_seen: timeStr()
-      };
-    };
-
-    navigator.bluetooth.addEventListener('advertisementreceived', onAdv);
-
+  // ── LOCAL API ──────────────────────────────────────────────
+  if (useLocalAPI) {
     try {
-      findScanActive = await navigator.bluetooth.requestLEScan({
-        acceptAllAdvertisements: true
+      const res = await fetch(LOCAL_API + '/api/find', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
       });
-      await new Promise(resolve => setTimeout(resolve, SCAN_DURATION));
-      findScanActive.stop();
-      findScanActive = null;
-    } catch(e) {
-      navigator.bluetooth.removeEventListener('advertisementreceived', onAdv);
-      statusEl.innerHTML = `<div class="status-msg not-found">❌ ${esc(e.message)}</div>`;
-      return;
-    }
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.error);
 
-    navigator.bluetooth.removeEventListener('advertisementreceived', onAdv);
-
-    // Update knownDevices with all scanned
-    for (const [addr, dev] of Object.entries(scannedDevices)) {
-      const idx = knownDevices.findIndex(d => d.address === addr);
-      if (idx >= 0) knownDevices[idx] = dev;
-      else knownDevices.push(dev);
-    }
-    updateChips();
-
-    const allCount = Object.keys(scannedDevices).length;
-    const queryLower = query.toLowerCase();
-
-    // Match by name (partial) or address (partial) — same as Flask /api/find
-    const matches = Object.values(scannedDevices).filter(d =>
-      d.name.toLowerCase().includes(queryLower) ||
-      d.address.toLowerCase().includes(queryLower)
-    ).sort((a, b) => b.rssi - a.rssi);
-
-    if (matches.length > 0) {
-      const best = matches[0];
-      const dist = best.distance;
-      const rssi = best.rssi;
-
-      // Proximity level
-      let level, color;
-      if (dist < 1) { level = '📍 Very Close!'; color = '#22c55e'; beep(1200, 100); }
-      else if (dist < 3) { level = '🟢 Close'; color = '#4ade80'; beep(800, 80); }
-      else if (dist < 8) { level = '🟡 Medium'; color = '#eab308'; }
-      else { level = '🔴 Far'; color = '#ef4444'; }
-
-      dot.className = 'radar-dot found';
-      proxLabel.textContent = level;
-      proxLabel.style.color = color;
-      proxSub.textContent = `${best.name} — ${distLabel(dist)} — RSSI: ${rssi} dBm`;
-
-      // Distance bar (inverse: closer = fuller)
-      const pct = Math.max(5, Math.min(100, Math.round((1 - Math.min(dist, 15) / 15) * 100)));
-      distBar.style.width = pct + '%';
-      distBar.style.background = color;
-
-      statusEl.innerHTML = `<div class="status-msg found">✅ Device found! ${matches.length} match(es) — Scanned ${allCount} total</div>`;
-
-      // Show matches
-      resultsEl.innerHTML = matches.map(m => `
-        <div style="background:var(--card);padding:12px 16px;border-radius:10px;margin:8px 0;display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <strong>${esc(m.name)}</strong>
-            <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">${esc(m.address)}</span>
-          </div>
-          <div style="text-align:right;">
-            <div>${conditionBadge(m.rssi)} &nbsp; ${m.rssi} dBm</div>
-            <div style="font-size:0.85rem;color:var(--muted);">${distLabel(m.distance)}</div>
-          </div>
-        </div>
-      `).join('');
-
-    } else {
-      dot.className = 'radar-dot lost';
-      proxLabel.textContent = '❌ Not Found';
-      proxLabel.style.color = '#ef4444';
-      proxSub.textContent = `"${query}" not in range — Scanned ${allCount} devices`;
-      distBar.style.width = '0%';
-
-      statusEl.innerHTML = `<div class="status-msg not-found">Device not found in this scan. Keep searching... (${allCount} devices scanned)</div>`;
-      resultsEl.innerHTML = '';
-    }
-
-  // ── Method 2: Fallback — use requestDevice picker
-  } else {
-    statusEl.innerHTML = '<div class="status-msg searching">🔍 Select your device from the browser picker...</div>';
-
-    try {
-      let device;
-      try {
-        device = await navigator.bluetooth.requestDevice({
-          filters: [{ namePrefix: query }],
-          optionalServices: []
-        });
-      } catch(e) {
-        device = await navigator.bluetooth.requestDevice({
-          acceptAllDevices: true,
-          optionalServices: []
+      // Update known devices
+      if (data.all_count > 0) {
+        fetch(LOCAL_API + '/api/history').then(r => r.json()).then(h => {
+          if (h.ok) { knownDevices = h.devices; updateChips(); }
         });
       }
 
-      const name = device.name || '(Unknown)';
-      let rssi = -999, distance = -1;
+      if (data.found && data.matches.length > 0) {
+        const best = data.matches[0];
+        const dist = best.distance;
+        const rssi = best.rssi;
 
-      if (device.watchAdvertisements) {
-        try {
-          const ac = new AbortController();
-          const p = new Promise(resolve => {
-            device.addEventListener('advertisementreceived', (ev) => {
-              rssi = ev.rssi || -999;
-              distance = rssi > -999 ? Math.round(estimateDistance(rssi) * 10) / 10 : -1;
-              ac.abort(); resolve();
-            });
-            setTimeout(() => { ac.abort(); resolve(); }, 5000);
-          });
-          await device.watchAdvertisements({ signal: ac.signal }).catch(() => {});
-          await p;
-        } catch(e) {}
-      }
-
-      if (rssi > -999) {
         let level, color;
-        if (distance < 1) { level = '📍 Very Close!'; color = '#22c55e'; beep(1200, 100); }
-        else if (distance < 3) { level = '🟢 Close'; color = '#4ade80'; beep(800, 80); }
-        else if (distance < 8) { level = '🟡 Medium'; color = '#eab308'; }
+        if (dist < 1) { level = '📍 Very Close!'; color = '#22c55e'; beep(1200, 100); }
+        else if (dist < 3) { level = '🟢 Close'; color = '#4ade80'; beep(800, 80); }
+        else if (dist < 8) { level = '🟡 Medium'; color = '#eab308'; }
         else { level = '🔴 Far'; color = '#ef4444'; }
 
         dot.className = 'radar-dot found';
         proxLabel.textContent = level;
         proxLabel.style.color = color;
-        proxSub.textContent = `${name} — ${distLabel(distance)} — RSSI: ${rssi} dBm`;
-        const pct = Math.max(5, Math.min(100, Math.round((1 - Math.min(distance, 15) / 15) * 100)));
+        proxSub.textContent = `${best.name} — ${distLabel(dist)} — RSSI: ${rssi} dBm`;
+
+        const pct = Math.max(5, Math.min(100, Math.round((1 - Math.min(dist, 15) / 15) * 100)));
         distBar.style.width = pct + '%';
         distBar.style.background = color;
-        statusEl.innerHTML = `<div class="status-msg found">✅ Device found! ${name} — ${rssi} dBm</div>`;
-        resultsEl.innerHTML = `
+
+        statusEl.innerHTML = `<div class="status-msg found">✅ Device found! ${data.matches.length} match(es) — Scanned ${data.all_count} total</div>`;
+
+        resultsEl.innerHTML = data.matches.map(m => `
           <div style="background:var(--card);padding:12px 16px;border-radius:10px;margin:8px 0;display:flex;justify-content:space-between;align-items:center;">
-            <div><strong>${esc(name)}</strong> <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">${esc(device.id)}</span></div>
-            <div style="text-align:right;">
-              <div>${conditionBadge(rssi)} &nbsp; ${rssi} dBm</div>
-              <div style="font-size:0.85rem;color:var(--muted);">${distLabel(distance)}</div>
+            <div>
+              <strong>${esc(m.name)}</strong>
+              <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">${esc(m.address)}</span>
             </div>
-          </div>`;
+            <div style="text-align:right;">
+              <div>${conditionBadge(m.rssi)} &nbsp; ${m.rssi} dBm</div>
+              <div style="font-size:0.85rem;color:var(--muted);">${distLabel(m.distance)}</div>
+            </div>
+          </div>
+        `).join('');
+
       } else {
         dot.className = 'radar-dot lost';
-        proxLabel.textContent = '⚠️ No RSSI';
-        proxLabel.style.color = '#eab308';
-        proxSub.textContent = `${name} selected but RSSI unavailable. Enable experimental flags for live tracking.`;
-        statusEl.innerHTML = `<div class="status-msg not-found">Selected "${esc(name)}" but could not read signal strength.</div>`;
+        proxLabel.textContent = '❌ Not Found';
+        proxLabel.style.color = '#ef4444';
+        proxSub.textContent = `"${query}" not in range — Scanned ${data.all_count} devices`;
+        distBar.style.width = '0%';
+        statusEl.innerHTML = `<div class="status-msg not-found">Device not found in this scan. Keep searching... (${data.all_count} devices scanned)</div>`;
+        resultsEl.innerHTML = '';
       }
 
-      // Update known devices
-      const entry = { name, address: device.id, rssi, distance, last_seen: timeStr() };
-      const idx = knownDevices.findIndex(d => d.address === device.id);
-      if (idx >= 0) knownDevices[idx] = entry;
-      else knownDevices.push(entry);
-      updateChips();
+    } catch(e) {
+      statusEl.innerHTML = `<div class="status-msg not-found">❌ Error: ${esc(e.message)}</div>`;
+    }
 
+  // ── WEB BLUETOOTH FALLBACK ─────────────────────────────────
+  } else {
+    statusEl.innerHTML = '<div class="status-msg searching">🔍 Select your device from the browser picker...</div>';
+    // Stop auto-interval for picker mode
+    clearInterval(findInterval); findInterval = null;
+
+    try {
+      const device = await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true, optionalServices: []
+      });
+      const name = device.name || '(Unknown)';
+
+      dot.className = 'radar-dot found';
+      proxLabel.textContent = '✅ Selected';
+      proxLabel.style.color = '#22c55e';
+      proxSub.textContent = `${name} — selected from picker`;
+      statusEl.innerHTML = `<div class="status-msg found">✅ Device "${esc(name)}" selected</div>`;
+      resultsEl.innerHTML = `
+        <div style="background:var(--card);padding:12px 16px;border-radius:10px;margin:8px 0;">
+          <strong>${esc(name)}</strong>
+          <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">${esc(device.id)}</span>
+        </div>`;
+
+      const entry = { name, address: device.id, rssi: -999, distance: -1, last_seen: new Date().toLocaleTimeString('en-US',{hour12:false}) };
+      const idx = knownDevices.findIndex(d => d.address === device.id);
+      if (idx >= 0) knownDevices[idx] = entry; else knownDevices.push(entry);
+      updateChips();
     } catch(e) {
       if (e.name !== 'NotFoundError') {
         statusEl.innerHTML = `<div class="status-msg not-found">❌ ${esc(e.message)}</div>`;
       }
-      // Stop auto-repeat for picker mode (user must click manually)
-      clearInterval(findInterval); findInterval = null;
     }
   }
 }
@@ -777,7 +628,6 @@ function updateChips() {
   const named = knownDevices.filter(d => d.name && d.name !== '(Unknown)');
   if (named.length === 0) return;
 
-  // Deduplicate by name
   const seen = new Set();
   const unique = [];
   named.forEach(d => {
