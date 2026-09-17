@@ -1,291 +1,307 @@
-<title>BLE Device Finder</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=DM+Sans:ital,wght@0,400;0,500;0,600&display=swap">
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>V006 — BLE Lost Device Finder</title>
 <style>
   :root {
     --bg: #0f172a; --surface: #1e293b; --card: #334155;
-    --accent: #3b82f6; --accent2: #22c55e; --danger: #ef4444; --warn: #eab308;
-    --text: #f1f5f9; --muted: #94a3b8; --border: #475569;
-    --mono: 'SF Mono', 'Cascadia Code', 'Fira Mono', monospace;
-  }
-  @media (prefers-color-scheme: light) {
-    :root:not([data-theme="dark"]) {
-      --bg: #f1f5f9; --surface: #ffffff; --card: #e2e8f0;
-      --accent: #2563eb; --accent2: #16a34a; --danger: #dc2626; --warn: #ca8a04;
-      --text: #0f172a; --muted: #64748b; --border: #cbd5e1;
-    }
-  }
-  :root[data-theme="dark"] {
-    --bg: #0f172a; --surface: #1e293b; --card: #334155;
-    --accent: #3b82f6; --accent2: #22c55e; --danger: #ef4444; --warn: #eab308;
+    --accent: #3b82f6; --accent2: #22c55e; --danger: #ef4444;
     --text: #f1f5f9; --muted: #94a3b8; --border: #475569;
   }
-
+  * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
     background: var(--bg); color: var(--text);
-    font-family: 'DM Sans', system-ui, sans-serif;
-    padding-block: 0 32px;
-    max-width: 960px; margin: 0 auto;
+    min-height: 100vh;
   }
-  h1, h2, h3 { font-family: 'Sora', system-ui, sans-serif; text-wrap: balance; }
 
-  /* ── Header ─────────────────────────────── */
-  .header {
+  /* ── Header ─────────────────────────────────────── */
+  header {
     background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: 14px 20px; display: flex; align-items: center; gap: 10px;
-    margin: 0 -16px;
+    padding: 16px 24px; display: flex; align-items: center; gap: 12px;
   }
-  .header h1 { font-size: 1.25rem; font-weight: 700; }
-  .header small { color: var(--muted); font-size: 0.8rem; }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  header .subtitle { color: var(--muted); font-size: 0.85rem; }
 
-  /* ── Tabs ────────────────────────────────── */
+  /* ── Tabs ───────────────────────────────────────── */
   .tabs {
     display: flex; background: var(--surface);
     border-bottom: 1px solid var(--border);
-    margin: 0 -16px; padding: 0 16px;
   }
   .tab {
-    padding: 11px 20px; cursor: pointer; font-size: 0.9rem;
+    padding: 12px 24px; cursor: pointer; font-size: 0.95rem;
     color: var(--muted); border-bottom: 2px solid transparent;
-    transition: all 0.15s; user-select: none;
-    font-family: 'Sora', sans-serif; font-weight: 500;
+    transition: all 0.2s;
   }
   .tab:hover { color: var(--text); }
   .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
 
-  .panel { display: none; padding-top: 20px; }
+  /* ── Panels ─────────────────────────────────────── */
+  .panel { display: none; padding: 24px; }
   .panel.active { display: block; }
 
-  /* ── Compat warning ─────────────────────── */
-  .compat {
-    background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25);
-    border-radius: 10px; padding: 12px 16px; font-size: 0.88rem;
-    line-height: 1.5; margin-bottom: 16px;
+  /* ── Find Device Panel ──────────────────────────── */
+  .find-box {
+    max-width: 600px; margin: 0 auto;
   }
-  .compat b { color: var(--danger); }
-
-  /* ── Buttons ─────────────────────────────── */
-  .btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 12px 22px; font-size: 0.95rem; font-weight: 600;
-    font-family: 'Sora', sans-serif;
-    border: none; border-radius: 10px; cursor: pointer;
-    transition: opacity 0.12s, transform 0.1s;
+  .find-input-row {
+    display: flex; gap: 10px; margin-bottom: 20px;
   }
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-  .btn-primary { background: var(--accent); color: #fff; }
-  .btn-danger  { background: var(--danger); color: #fff; }
-  .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
-  .btn-sm { padding: 6px 14px; font-size: 0.8rem; border-radius: 6px; }
-
-  /* ── Find panel ─────────────────────────── */
-  .find-box { max-width: 600px; margin: 0 auto; }
-  .find-row { display: flex; gap: 8px; margin-bottom: 16px; }
-  .find-row input {
-    flex: 1; padding: 12px 14px; font-size: 1rem;
+  .find-input-row input {
+    flex: 1; padding: 14px 16px; font-size: 1.1rem;
     border-radius: 10px; border: 2px solid var(--border);
-    background: var(--surface); color: var(--text); outline: none;
-    font-family: 'DM Sans', sans-serif;
+    background: var(--surface); color: var(--text);
+    outline: none; transition: border-color 0.2s;
   }
-  .find-row input:focus { border-color: var(--accent); }
-  .find-row input::placeholder { color: var(--muted); }
+  .find-input-row input:focus { border-color: var(--accent); }
+  .find-input-row input::placeholder { color: var(--muted); }
 
-  /* ── Radar ───────────────────────────────── */
-  .radar-wrap {
-    display: none; flex-direction: column; align-items: center;
-    padding: 24px 0 8px;
+  .btn {
+    padding: 14px 24px; font-size: 1rem; font-weight: 600;
+    border: none; border-radius: 10px; cursor: pointer;
+    transition: all 0.2s; white-space: nowrap;
   }
-  .radar-wrap[data-on] { display: flex; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-primary:disabled { background: var(--card); color: var(--muted); cursor: wait; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-outline {
+    background: transparent; color: var(--accent);
+    border: 2px solid var(--accent);
+  }
+  .btn-outline:hover { background: var(--accent); color: #fff; }
+
+  /* ── Radar / Proximity ──────────────────────────── */
+  .radar-container {
+    display: flex; flex-direction: column; align-items: center;
+    margin: 20px 0;
+  }
   .radar {
-    position: relative; width: 220px; height: 220px;
+    width: 260px; height: 260px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.15) 0%, transparent 70%);
+    border: 2px solid var(--border); position: relative;
+    display: flex; align-items: center; justify-content: center;
   }
-  .rr {
-    position: absolute; border-radius: 50%;
-    border: 1px solid var(--border); opacity: 0.4;
-    top: 50%; left: 50%; transform: translate(-50%,-50%);
+  .radar-ring {
+    position: absolute; border-radius: 50%; border: 1px solid var(--border);
   }
-  .rr:nth-child(1) { width: 100%; height: 100%; }
-  .rr:nth-child(2) { width: 66%; height: 66%; }
-  .rr:nth-child(3) { width: 33%; height: 33%; }
-  .sweep {
-    position: absolute; inset: 0; border-radius: 50%; overflow: hidden;
+  .radar-ring.r1 { width: 33%; height: 33%; }
+  .radar-ring.r2 { width: 66%; height: 66%; }
+  .radar-ring.r3 { width: 100%; height: 100%; }
+  .radar-dot {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 20px var(--accent);
+    animation: pulse 1.5s infinite;
   }
-  .sweep::after {
-    content: ''; position: absolute; top: 50%; left: 50%;
-    width: 50%; height: 2px;
-    background: linear-gradient(90deg, rgba(59,130,246,0.4), transparent);
-    transform-origin: left center;
-    animation: sw 2.4s linear infinite;
+  .radar-dot.found { background: var(--accent2); box-shadow: 0 0 30px var(--accent2); }
+  .radar-dot.lost { background: var(--danger); box-shadow: 0 0 10px var(--danger); animation: none; }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
   }
-  @keyframes sw { to { transform: rotate(360deg); } }
 
-  .dot {
-    position: absolute; top: 50%; left: 50%;
-    width: 14px; height: 14px; border-radius: 50%;
-    transform: translate(-50%,-50%);
-    background: var(--accent); box-shadow: 0 0 16px rgba(59,130,246,0.4);
-    transition: all 0.5s;
+  .proximity-label {
+    font-size: 2.2rem; font-weight: 700; margin-top: 20px;
   }
-  .dot[data-s="found"] { background: var(--accent2); box-shadow: 0 0 24px rgba(34,197,94,0.5); animation: dp 1.2s ease infinite; }
-  .dot[data-s="lost"]  { background: var(--danger); box-shadow: 0 0 10px rgba(239,68,68,0.4); animation: none; }
-  @keyframes dp { 0%,100%{transform:translate(-50%,-50%) scale(1)} 50%{transform:translate(-50%,-50%) scale(1.5)} }
-
-  .prox-label { font-family: 'Sora', sans-serif; font-size: 1.8rem; font-weight: 700; margin-top: 16px; text-align: center; }
-  .prox-sub { color: var(--muted); font-size: 0.85rem; margin-top: 2px; text-align: center; }
-
-  .meter { max-width: 340px; width: 100%; margin: 14px auto 0; }
-  .meter-bg { height: 12px; background: var(--card); border-radius: 6px; overflow: hidden; }
-  .meter-fill { height: 100%; border-radius: 6px; width: 0%; transition: width 0.5s, background 0.4s; background: var(--accent); }
-  .meter-lbl { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
-
-  /* ── Status msgs ────────────────────────── */
-  .msg {
-    text-align: center; padding: 12px 16px; border-radius: 10px;
-    margin: 12px 0; font-size: 0.9rem;
+  .proximity-sub {
+    color: var(--muted); font-size: 1rem; margin-top: 4px;
   }
-  .msg-search { background: rgba(59,130,246,0.12); color: var(--accent); }
-  .msg-found  { background: rgba(34,197,94,0.12); color: var(--accent2); }
-  .msg-lost   { background: rgba(239,68,68,0.12); color: var(--danger); }
 
-  /* ── Device info card ───────────────────── */
-  .info-card {
-    display: none; grid-template-columns: auto 1fr; gap: 3px 14px;
-    background: var(--surface); border-radius: 10px; padding: 14px 18px;
-    margin-top: 14px;
+  /* Distance bar */
+  .distance-bar-wrap {
+    width: 100%; max-width: 400px; margin: 20px auto;
   }
-  .info-card[data-on] { display: grid; }
-  .info-card dt { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
-  .info-card dd { font-size: 0.88rem; font-variant-numeric: tabular-nums; }
-  .addr { font-family: var(--mono); font-size: 0.8rem; }
+  .distance-bar-bg {
+    width: 100%; height: 16px; background: var(--card);
+    border-radius: 8px; overflow: hidden;
+  }
+  .distance-bar-fill {
+    height: 100%; border-radius: 8px;
+    transition: width 0.5s ease, background 0.5s ease;
+  }
+  .distance-bar-labels {
+    display: flex; justify-content: space-between;
+    font-size: 0.75rem; color: var(--muted); margin-top: 4px;
+  }
 
-  /* ── Scan table ─────────────────────────── */
-  .scan-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-  .scan-count { color: var(--muted); font-size: 0.85rem; }
+  /* ── Status messages ────────────────────────────── */
+  .status-msg {
+    text-align: center; padding: 16px; border-radius: 10px;
+    margin: 16px 0; font-size: 1rem;
+  }
+  .status-msg.searching { background: rgba(59,130,246,0.15); color: var(--accent); }
+  .status-msg.found { background: rgba(34,197,94,0.15); color: var(--accent2); }
+  .status-msg.not-found { background: rgba(239,68,68,0.15); color: var(--danger); }
 
-  .tbl-wrap { overflow-x: auto; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  /* ── Scan All Panel ─────────────────────────────── */
+  .scan-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .device-count { color: var(--muted); font-size: 0.9rem; }
+
+  table {
+    width: 100%; border-collapse: collapse; font-size: 0.9rem;
+  }
   th {
-    text-align: left; padding: 9px 10px; color: var(--muted);
+    text-align: left; padding: 10px 12px; color: var(--muted);
     border-bottom: 1px solid var(--border); font-weight: 600;
-    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;
   }
-  td { padding: 9px 10px; border-bottom: 1px solid rgba(71,85,105,0.2); }
-  tr:hover td { background: rgba(59,130,246,0.04); }
+  td {
+    padding: 10px 12px; border-bottom: 1px solid rgba(71,85,105,0.3);
+  }
+  tr:hover { background: rgba(59,130,246,0.05); }
 
-  .sig { font-family: var(--mono); letter-spacing: 1px; font-size: 0.8rem; }
-  .sig-g { color: var(--accent2); }
-  .sig-y { color: var(--warn); }
-  .sig-r { color: var(--danger); }
+  .signal-bar {
+    display: inline-block; font-family: monospace; letter-spacing: 1px;
+  }
+  .signal-good { color: var(--accent2); }
+  .signal-fair { color: #eab308; }
+  .signal-weak { color: var(--danger); }
 
   .badge {
-    display: inline-block; padding: 2px 8px; border-radius: 5px;
-    font-size: 0.72rem; font-weight: 600;
+    display: inline-block; padding: 2px 8px; border-radius: 6px;
+    font-size: 0.75rem; font-weight: 600;
   }
-  .b-exc { background: rgba(34,197,94,0.15); color: var(--accent2); }
-  .b-good { background: rgba(34,197,94,0.1); color: #4ade80; }
-  .b-fair { background: rgba(234,179,8,0.12); color: var(--warn); }
-  .b-weak { background: rgba(239,68,68,0.12); color: var(--danger); }
+  .badge-excellent { background: rgba(34,197,94,0.2); color: var(--accent2); }
+  .badge-good { background: rgba(34,197,94,0.15); color: #4ade80; }
+  .badge-fair { background: rgba(234,179,8,0.15); color: #eab308; }
+  .badge-weak { background: rgba(239,68,68,0.15); color: var(--danger); }
 
-  .track-btn {
-    padding: 4px 10px; font-size: 0.78rem; border-radius: 6px;
+  .select-btn {
+    padding: 4px 10px; font-size: 0.8rem; border-radius: 6px;
     border: 1px solid var(--accent); background: transparent;
-    color: var(--accent); cursor: pointer;
+    color: var(--accent); cursor: pointer; transition: all 0.15s;
   }
-  .track-btn:hover { background: var(--accent); color: #fff; }
+  .select-btn:hover { background: var(--accent); color: #fff; }
 
-  /* ── Known devices chips ────────────────── */
-  .chips-section { margin-top: 20px; }
-  .chips-section h3 { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-  .chip {
-    display: inline-block; padding: 6px 14px; margin: 3px;
-    background: var(--card); border-radius: 20px; font-size: 0.82rem;
-    cursor: pointer; border: 1px solid var(--border); transition: all 0.12s;
+  /* ── Known devices list (find panel) ────────────── */
+  .known-devices { margin-top: 24px; }
+  .known-devices h3 { font-size: 1rem; color: var(--muted); margin-bottom: 10px; }
+  .device-chip {
+    display: inline-block; padding: 6px 14px; margin: 4px;
+    background: var(--card); border-radius: 20px; font-size: 0.85rem;
+    cursor: pointer; border: 1px solid var(--border); transition: all 0.15s;
   }
-  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .device-chip:hover { border-color: var(--accent); color: var(--accent); }
 
+  /* ── Web Bluetooth notice ──────────────────────── */
+  .ble-notice {
+    background: rgba(59,130,246,0.1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px; margin-bottom: 20px;
+    font-size: 0.85rem; color: var(--muted); line-height: 1.5;
+  }
+  .ble-notice strong { color: var(--text); }
+
+  /* ── Responsive ─────────────────────────────────── */
   @media (max-width: 600px) {
-    th:nth-child(7), td:nth-child(7) { display: none; }
-    .find-row { flex-direction: column; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .sweep::after, .dot[data-s="found"] { animation: none; }
-    .meter-fill { transition: none; }
+    .find-input-row { flex-direction: column; }
+    header h1 { font-size: 1.1rem; }
+    .proximity-label { font-size: 1.6rem; }
+    .radar { width: 200px; height: 200px; }
+    table { font-size: 0.8rem; }
+    th, td { padding: 8px 6px; }
   }
 </style>
+</head>
+<body>
 
-<div class="header">
+<header>
   <div>
     <h1>📡 BLE Lost Device Finder</h1>
-    <small>Scan &amp; locate nearby Bluetooth devices</small>
+    <div class="subtitle">Scan & locate nearby Bluetooth devices</div>
   </div>
-</div>
+</header>
 
+<!-- Tabs -->
 <div class="tabs">
-  <div class="tab active" data-t="find">🔍 Find My Device</div>
-  <div class="tab" data-t="scan">📋 Scan All Devices</div>
+  <div class="tab active" data-tab="find">🔍 Find My Device</div>
+  <div class="tab" data-tab="scan">📋 Scan All Devices</div>
 </div>
 
-<!-- ══════════ FIND TAB ══════════ -->
-<div id="p-find" class="panel active">
+<!-- ════════════════ Find My Device Panel ════════════════ -->
+<div id="panel-find" class="panel active">
   <div class="find-box">
-    <div id="compat" hidden class="compat"></div>
 
-    <div class="find-row">
-      <input type="text" id="q" placeholder="Enter device name to filter, or select below…" autocomplete="off" spellcheck="false">
-      <button class="btn btn-primary" id="btn-find" onclick="startFind()">🔍 Find</button>
-      <button class="btn btn-danger" id="btn-stop" onclick="stopFind()" hidden>⏹ Stop</button>
+    <div class="ble-notice" id="ble-notice">
+      <strong>ℹ️ Web Bluetooth</strong> — This site uses your browser's Bluetooth to scan.
+      A device picker will appear when you click <strong>Find</strong> or <strong>Scan Now</strong>.
+      Works on <strong>Chrome / Edge</strong> (desktop & Android).
     </div>
 
-    <div class="radar-wrap" id="radar">
+    <div class="find-input-row">
+      <input type="text" id="find-query" placeholder="Enter device name or MAC address..."
+             autocomplete="off" spellcheck="false">
+      <button class="btn btn-primary" id="btn-find" onclick="startFinding()">
+        🔍 Find
+      </button>
+      <button class="btn btn-danger" id="btn-stop" onclick="stopFinding()" style="display:none;">
+        ⏹ Stop
+      </button>
+    </div>
+
+    <!-- Radar display -->
+    <div class="radar-container" id="radar-section" style="display:none;">
       <div class="radar">
-        <div class="rr"></div><div class="rr"></div><div class="rr"></div>
-        <div class="sweep"></div>
-        <div class="dot" id="dot"></div>
+        <div class="radar-ring r1"></div>
+        <div class="radar-ring r2"></div>
+        <div class="radar-ring r3"></div>
+        <div class="radar-dot" id="radar-dot"></div>
       </div>
-      <div class="prox-label" id="plbl">Searching…</div>
-      <div class="prox-sub" id="psub"></div>
-      <div class="meter">
-        <div class="meter-bg"><div class="meter-fill" id="mfill"></div></div>
-        <div class="meter-lbl"><span>Far</span><span>Close</span></div>
+      <div class="proximity-label" id="proximity-label">Searching...</div>
+      <div class="proximity-sub" id="proximity-sub"></div>
+
+      <div class="distance-bar-wrap">
+        <div class="distance-bar-bg">
+          <div class="distance-bar-fill" id="distance-bar" style="width:0%; background:#3b82f6;"></div>
+        </div>
+        <div class="distance-bar-labels">
+          <span>Far</span><span>Close</span>
+        </div>
       </div>
     </div>
 
-    <div id="fmsg"></div>
+    <!-- Status -->
+    <div id="find-status"></div>
 
-    <dl class="info-card" id="info">
-      <dt>Device</dt><dd id="i-name">—</dd>
-      <dt>Address</dt><dd id="i-addr" class="addr">—</dd>
-      <dt>RSSI</dt><dd id="i-rssi">—</dd>
-      <dt>Condition</dt><dd id="i-cond">—</dd>
-      <dt>Distance</dt><dd id="i-dist">—</dd>
-      <dt>Last Seen</dt><dd id="i-time">—</dd>
-    </dl>
+    <!-- Match results -->
+    <div id="find-results"></div>
 
-    <div class="chips-section" id="chips-sec">
-      <h3>💡 Recently seen devices — click to track</h3>
-      <div id="chips"><span style="color:var(--muted)">Scan first to see devices here</span></div>
+    <!-- Known devices chips -->
+    <div class="known-devices" id="known-devices">
+      <h3>💡 Recently seen devices — click to track:</h3>
+      <div id="device-chips">
+        <span style="color:var(--muted);">Scan first to see devices here</span>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- ══════════ SCAN TAB ══════════ -->
-<div id="p-scan" class="panel">
-  <div class="scan-bar">
+<!-- ════════════════ Scan All Panel ════════════════ -->
+<div id="panel-scan" class="panel">
+  <div class="scan-header">
     <button class="btn btn-primary" id="btn-scan" onclick="scanAll()">📡 Scan Now</button>
-    <button class="btn btn-outline btn-sm" id="btn-clear" onclick="clearScan()" hidden>Clear</button>
-    <span class="scan-count" id="scount"></span>
+    <span class="device-count" id="scan-count"></span>
   </div>
-  <div class="tbl-wrap">
+  <div id="scan-table-wrap">
     <table>
-      <thead><tr>
-        <th>Device Name</th><th>MAC Address</th><th>RSSI</th>
-        <th>Signal</th><th>Condition</th><th>Distance</th>
-        <th>Last Seen</th><th></th>
-      </tr></thead>
-      <tbody id="tbody">
-        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:36px">
-          Press "Scan Now" to discover nearby devices
+      <thead>
+        <tr>
+          <th>Device Name</th>
+          <th>MAC Address</th>
+          <th>RSSI</th>
+          <th>Signal</th>
+          <th>Condition</th>
+          <th>Distance</th>
+          <th>Last Seen</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="scan-tbody">
+        <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:40px;">
+          Press "Scan Now" to discover devices
         </td></tr>
       </tbody>
     </table>
@@ -293,256 +309,332 @@
 </div>
 
 <script>
-const TX=-59, N=2.5;
-const $=id=>document.getElementById(id);
-let allDevices=[], tracking=null, watchAC=null, beepTmr=null, audioCtx=null;
+// ── State ────────────────────────────────────────────────────
+let knownDevices = [];
+let audioCtx = null;
+let watchAbortController = null;
+let currentWatchDevice = null;
 
-// ── Tabs
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(x=>x.classList.remove('active'));
-  t.classList.add('active');
-  $('p-'+t.dataset.t).classList.add('active');
+// ── BLE constants ───────────────────────────────────────────
+const TX_POWER = -59;
+const PATH_LOSS_EXP = 2.5;
+
+function estimateDistance(rssi) {
+  if (rssi >= 0) return 0;
+  return Math.pow(10, (TX_POWER - rssi) / (10 * PATH_LOSS_EXP));
+}
+
+// ── Check Web Bluetooth support ─────────────────────────────
+if (!navigator.bluetooth) {
+  document.getElementById('ble-notice').innerHTML =
+    '<strong>⚠️ Web Bluetooth not supported</strong> — Your browser does not support Web Bluetooth. ' +
+    'Please use <strong>Chrome</strong> or <strong>Edge</strong> on desktop or Android.';
+  document.getElementById('ble-notice').style.borderColor = 'var(--danger)';
+  document.getElementById('ble-notice').style.background = 'rgba(239,68,68,0.1)';
+  document.getElementById('btn-find').disabled = true;
+  document.getElementById('btn-scan').disabled = true;
+}
+
+// ── Tabs ─────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
 });
 
-// ── Compat
-if(!navigator.bluetooth){
-  $('compat').hidden=false;
-  $('compat').innerHTML='<b>⚠ Browser not supported.</b> Web Bluetooth requires <b>Chrome</b>, <b>Edge</b>, or <b>Opera</b>. Safari and Firefox are not supported.';
-  $('btn-find').disabled=true; $('btn-scan').disabled=true;
+// ── Helpers ──────────────────────────────────────────────────
+function signalBar(rssi) {
+  const strength = Math.max(0, Math.min(10, Math.floor((rssi + 100) / 5)));
+  const full = '█'.repeat(strength);
+  const empty = '░'.repeat(10 - strength);
+  const cls = rssi >= -60 ? 'signal-good' : rssi >= -80 ? 'signal-fair' : 'signal-weak';
+  return `<span class="signal-bar ${cls}">${full}${empty}</span>`;
 }
 
-// ── Helpers
-function dist(rssi){return rssi>=0?0:Math.pow(10,(TX-rssi)/(10*N))}
-function fmtD(d){
-  if(d<0)return'N/A';
-  if(d<1)return d.toFixed(1)+' m (Very Close)';
-  if(d<3)return d.toFixed(1)+' m (Close)';
-  if(d<8)return d.toFixed(1)+' m (Medium)';
-  return Math.round(d)+' m (Far)';
-}
-function sigBar(rssi){
-  const s=Math.max(0,Math.min(10,Math.floor((rssi+100)/5)));
-  const c=rssi>=-60?'sig-g':rssi>=-80?'sig-y':'sig-r';
-  return `<span class="sig ${c}">${'█'.repeat(s)}${'░'.repeat(10-s)}</span>`;
-}
-function condBadge(rssi){
-  if(rssi>=-50)return'<span class="badge b-exc">Excellent</span>';
-  if(rssi>=-65)return'<span class="badge b-good">Good</span>';
-  if(rssi>=-80)return'<span class="badge b-fair">Fair</span>';
-  return'<span class="badge b-weak">Weak</span>';
-}
-function condText(rssi){
-  if(rssi>=-50)return'🟢 Excellent';
-  if(rssi>=-65)return'🟢 Good';
-  if(rssi>=-80)return'🟡 Fair';
-  return'🔴 Weak';
-}
-function esc(s){const d=document.createElement('span');d.textContent=s;return d.innerHTML}
-function now(){return new Date().toLocaleTimeString()}
-
-function beep(f,d){
-  try{
-    if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-    const o=audioCtx.createOscillator(),g=audioCtx.createGain();
-    o.connect(g);g.connect(audioCtx.destination);
-    o.frequency.value=f;g.gain.value=0.12;
-    o.start();o.stop(audioCtx.currentTime+d/1000);
-  }catch{}
-}
-function beepLoop(d){
-  clearInterval(beepTmr);
-  let iv=d<1?300:d<3?700:d<8?1500:3000;
-  let fr=d<1?1200:d<3?900:d<8?600:400;
-  beep(fr,60);
-  beepTmr=setInterval(()=>beep(fr,60),iv);
+function conditionBadge(rssi) {
+  if (rssi >= -50) return '<span class="badge badge-excellent">Excellent</span>';
+  if (rssi >= -65) return '<span class="badge badge-good">Good</span>';
+  if (rssi >= -80) return '<span class="badge badge-fair">Fair</span>';
+  return '<span class="badge badge-weak">Weak</span>';
 }
 
-// ── Scan All (Web Bluetooth requestDevice with acceptAllDevices)
-async function scanAll(){
-  const btn=$('btn-scan'),tbody=$('tbody'),cnt=$('scount');
-  btn.disabled=true; btn.textContent='⏳ Scanning…';
-  cnt.textContent='Select a device from the browser picker…';
+function distLabel(d) {
+  if (d < 0) return 'N/A';
+  if (d < 1) return d.toFixed(1) + ' m (Very Close)';
+  if (d < 3) return d.toFixed(1) + ' m (Close)';
+  if (d < 8) return d.toFixed(1) + ' m (Medium)';
+  return d.toFixed(0) + ' m (Far)';
+}
 
-  try{
-    // Web Bluetooth: each requestDevice shows a picker.
-    // We'll collect devices by repeated scan.
-    const device=await navigator.bluetooth.requestDevice({
-      acceptAllDevices:true,
-      optionalServices:['generic_access']
+function timeStr() {
+  return new Date().toLocaleTimeString('en-US', { hour12: false });
+}
+
+function beep(freq, duration) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.frequency.value = freq;
+    gain.gain.value = 0.15;
+    osc.start(); osc.stop(audioCtx.currentTime + duration / 1000);
+  } catch(e) {}
+}
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// ── Scan All (Web Bluetooth) ────────────────────────────────
+async function scanAll() {
+  const btn = document.getElementById('btn-scan');
+  const tbody = document.getElementById('scan-tbody');
+  const countEl = document.getElementById('scan-count');
+
+  if (!navigator.bluetooth) {
+    countEl.textContent = '❌ Web Bluetooth not supported in this browser';
+    return;
+  }
+
+  btn.disabled = true; btn.textContent = '⏳ Scanning...';
+  countEl.textContent = 'Select a device from the picker...';
+
+  try {
+    const device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: []
     });
 
-    // Got one device from picker — add to our list
-    const entry={name:device.name||'(Unknown)',address:device.id,rssi:null,distance:-1,last_seen:now(),_dev:device};
+    const name = device.name || '(Unknown)';
+    const id = device.id || 'N/A';
+    const now = timeStr();
+
+    let rssi = -999;
+    let distance = -1;
 
     // Try to get RSSI via watchAdvertisements
-    if(device.watchAdvertisements){
-      const ac=new AbortController();
-      const prom=new Promise(resolve=>{
-        let got=false;
-        device.addEventListener('advertisementreceived',ev=>{
-          if(!got){got=true; entry.rssi=ev.rssi; entry.distance=Math.round(dist(ev.rssi)*10)/10; entry.last_seen=now(); ac.abort(); resolve();}
+    if (device.watchAdvertisements) {
+      try {
+        const ac = new AbortController();
+        const rssiPromise = new Promise((resolve) => {
+          device.addEventListener('advertisementreceived', (event) => {
+            rssi = event.rssi || -999;
+            distance = rssi > -999 ? Math.round(estimateDistance(rssi) * 10) / 10 : -1;
+            ac.abort();
+            resolve();
+          });
+          setTimeout(() => { ac.abort(); resolve(); }, 5000);
         });
-        setTimeout(()=>{if(!got){ac.abort();resolve();}},4000);
-      });
-      try{await device.watchAdvertisements({signal:ac.signal});}catch{}
-      await prom;
+        await device.watchAdvertisements({ signal: ac.signal }).catch(() => {});
+        await rssiPromise;
+      } catch(e) {}
     }
 
-    // Add or update
-    const idx=allDevices.findIndex(d=>d.address===entry.address);
-    if(idx>=0)allDevices[idx]=entry; else allDevices.push(entry);
-
-    renderTable();
+    // Add to known devices
+    const entry = { name, address: id, rssi, distance, last_seen: now };
+    const existing = knownDevices.findIndex(d => d.address === id);
+    if (existing >= 0) knownDevices[existing] = entry;
+    else knownDevices.push(entry);
     updateChips();
-    cnt.textContent=`${allDevices.length} device(s) found — scan again to add more`;
-    $('btn-clear').hidden=false;
-  }catch(e){
-    if(e.name!=='NotFoundError') cnt.textContent='❌ '+e.message;
-    else cnt.textContent='Cancelled. '+allDevices.length+' device(s) in list.';
+
+    // Render table
+    const sorted = [...knownDevices].sort((a, b) => (b.rssi || -999) - (a.rssi || -999));
+    tbody.innerHTML = '';
+    sorted.forEach(d => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><strong>${esc(d.name)}</strong></td>
+        <td style="font-family:monospace;font-size:0.8rem;">${esc(d.address)}</td>
+        <td>${d.rssi > -999 ? d.rssi : 'N/A'}</td>
+        <td>${d.rssi > -999 ? signalBar(d.rssi) : ''}</td>
+        <td>${d.rssi > -999 ? conditionBadge(d.rssi) : ''}</td>
+        <td>${distLabel(d.distance)}</td>
+        <td>${d.last_seen}</td>
+        <td><button class="select-btn" onclick="trackDevice('${esc(d.name === '(Unknown)' ? d.address : d.name)}')">Track</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    countEl.textContent = `Found ${knownDevices.length} device(s) — scan again to add more`;
+  } catch(e) {
+    if (e.name === 'NotFoundError') {
+      countEl.textContent = 'No device selected (picker cancelled)';
+    } else {
+      countEl.textContent = '❌ ' + e.message;
+    }
   }
-  btn.disabled=false; btn.textContent='📡 Scan Now';
+  btn.disabled = false; btn.textContent = '📡 Scan Now';
 }
 
-function renderTable(){
-  const tbody=$('tbody');
-  const sorted=[...allDevices].sort((a,b)=>(b.rssi||(-999))-(a.rssi||(-999)));
-  tbody.innerHTML=sorted.map(d=>{
-    const r=d.rssi;
-    return`<tr>
-      <td><strong>${esc(d.name)}</strong></td>
-      <td style="font-family:var(--mono);font-size:0.78rem">${esc(d.address.slice(0,20))}</td>
-      <td>${r!=null?r:'—'}</td>
-      <td>${r!=null?sigBar(r):''}</td>
-      <td>${r!=null?condBadge(r):''}</td>
-      <td>${fmtD(d.distance)}</td>
-      <td>${d.last_seen}</td>
-      <td><button class="track-btn" onclick="goTrack('${esc(d.name==='(Unknown)'?d.address:d.name)}')">Track</button></td>
-    </tr>`;
-  }).join('');
-}
-
-function clearScan(){
-  allDevices=[];
-  $('tbody').innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:36px">Press "Scan Now" to discover nearby devices</td></tr>';
-  $('scount').textContent='';
-  $('btn-clear').hidden=true;
-  updateChips();
-}
-
-function goTrack(name){
-  $('q').value=name;
+// ── Track from scan table ────────────────────────────────────
+function trackDevice(name) {
+  document.getElementById('find-query').value = name;
   document.querySelectorAll('.tab')[0].click();
-  startFind();
+  startFinding();
 }
 
-// ── Find My Device
-async function startFind(){
-  const query=$('q').value.trim();
-  if(!query){alert('Enter a device name or select from the list below.');return;}
+// ── Find My Device (Web Bluetooth) ───────────────────────────
+async function startFinding() {
+  const query = document.getElementById('find-query').value.trim();
+  if (!query) { alert('Please enter a device name or MAC address'); return; }
 
-  $('btn-find').hidden=true;
-  $('btn-stop').hidden=false;
-  $('q').disabled=true;
-  $('radar').setAttribute('data-on','');
-  $('info').setAttribute('data-on','');
-  $('dot').setAttribute('data-s','');
-  $('plbl').textContent='Searching…';
-  $('plbl').style.color='';
-  $('psub').textContent='Looking for "'+query+'"…';
-  $('fmsg').innerHTML='<div class="msg msg-search">🔍 Select your device from the browser picker…</div>';
+  if (!navigator.bluetooth) {
+    document.getElementById('find-status').innerHTML =
+      '<div class="status-msg not-found">❌ Web Bluetooth not supported</div>';
+    return;
+  }
 
-  try{
-    // Request the device — browser picker with name filter
-    let filters;
-    try{
-      // Try name prefix filter first
-      filters={filters:[{namePrefix:query}],optionalServices:['generic_access']};
-      tracking=await navigator.bluetooth.requestDevice(filters);
-    }catch{
-      // Fallback: acceptAllDevices
-      tracking=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:['generic_access']});
+  document.getElementById('btn-find').style.display = 'none';
+  document.getElementById('btn-stop').style.display = '';
+  document.getElementById('radar-section').style.display = 'flex';
+  document.getElementById('find-query').disabled = true;
+
+  const statusEl = document.getElementById('find-status');
+  const dot = document.getElementById('radar-dot');
+  const proxLabel = document.getElementById('proximity-label');
+  const proxSub = document.getElementById('proximity-sub');
+
+  statusEl.innerHTML = '<div class="status-msg searching">🔍 Select your device from the browser picker...</div>';
+  proxLabel.textContent = 'Waiting...';
+  proxSub.textContent = 'Select a device from the picker to start tracking';
+
+  try {
+    // Try name filter first, fall back to acceptAllDevices
+    let device;
+    try {
+      device = await navigator.bluetooth.requestDevice({
+        filters: [{ namePrefix: query }],
+        optionalServices: []
+      });
+    } catch(e) {
+      if (e.name === 'NotFoundError' || e.message.includes('filter')) {
+        device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: []
+        });
+      } else {
+        throw e;
+      }
     }
 
-    $('i-name').textContent=tracking.name||'(Unknown)';
-    $('i-addr').textContent=tracking.id;
-    $('fmsg').innerHTML='<div class="msg msg-search">📡 Tracking signal… walk around to locate</div>';
+    currentWatchDevice = device;
+    const name = device.name || '(Unknown)';
 
-    if(tracking.watchAdvertisements){
-      watchAC=new AbortController();
-      tracking.addEventListener('advertisementreceived',onAdv);
-      await tracking.watchAdvertisements({signal:watchAC.signal});
-    }else{
-      $('plbl').textContent='Limited tracking';
-      $('psub').textContent='Your browser does not support live signal tracking. Use Chrome 102+.';
+    statusEl.innerHTML = `<div class="status-msg found">✅ Connected to "${esc(name)}" — Tracking RSSI...</div>`;
+    proxLabel.textContent = 'Tracking...';
+    proxSub.textContent = `${name} — Listening for advertisements...`;
+
+    // Watch advertisements for live RSSI updates
+    if (device.watchAdvertisements) {
+      watchAbortController = new AbortController();
+
+      device.addEventListener('advertisementreceived', (event) => {
+        const rssi = event.rssi;
+        if (rssi == null) return;
+
+        const dist = Math.round(estimateDistance(rssi) * 10) / 10;
+
+        // Proximity level
+        let level, color;
+        if (dist < 1) { level = '📍 Very Close!'; color = '#22c55e'; beep(1200, 100); }
+        else if (dist < 3) { level = '🟢 Close'; color = '#4ade80'; beep(800, 80); }
+        else if (dist < 8) { level = '🟡 Medium'; color = '#eab308'; }
+        else { level = '🔴 Far'; color = '#ef4444'; }
+
+        dot.className = 'radar-dot found';
+        proxLabel.textContent = level;
+        proxLabel.style.color = color;
+        proxSub.textContent = `${name} — ${distLabel(dist)} — RSSI: ${rssi} dBm`;
+
+        // Distance bar
+        const distBar = document.getElementById('distance-bar');
+        const pct = Math.max(5, Math.min(100, Math.round((1 - Math.min(dist, 15) / 15) * 100)));
+        distBar.style.width = pct + '%';
+        distBar.style.background = color;
+
+        statusEl.innerHTML = `<div class="status-msg found">✅ Device found! — RSSI: ${rssi} dBm — ${distLabel(dist)}</div>`;
+
+        // Show match result card
+        const resultsEl = document.getElementById('find-results');
+        resultsEl.innerHTML = `
+          <div style="background:var(--card);padding:12px 16px;border-radius:10px;margin:8px 0;display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <strong>${esc(name)}</strong>
+              <span style="color:var(--muted);font-size:0.85rem;margin-left:8px;">${esc(device.id)}</span>
+            </div>
+            <div style="text-align:right;">
+              <div>${conditionBadge(rssi)} &nbsp; ${rssi} dBm</div>
+              <div style="font-size:0.85rem;color:var(--muted);">${distLabel(dist)}</div>
+            </div>
+          </div>
+        `;
+
+        // Update known devices
+        const entry = { name, address: device.id, rssi, distance: dist, last_seen: timeStr() };
+        const idx = knownDevices.findIndex(d => d.address === device.id);
+        if (idx >= 0) knownDevices[idx] = entry;
+        else knownDevices.push(entry);
+        updateChips();
+      });
+
+      try {
+        await device.watchAdvertisements({ signal: watchAbortController.signal });
+      } catch(e) {
+        statusEl.innerHTML = `<div class="status-msg not-found">⚠️ Live RSSI tracking not available. Enable chrome://flags/#enable-experimental-web-platform-features</div>`;
+        dot.className = 'radar-dot lost';
+        proxLabel.textContent = '⚠️ Limited';
+        proxSub.textContent = `${name} selected — Live tracking requires Chrome experimental flags`;
+      }
+    } else {
+      statusEl.innerHTML = `<div class="status-msg not-found">⚠️ watchAdvertisements not supported. Use Chrome 102+ with experimental flags.</div>`;
+      proxLabel.textContent = '⚠️ Limited';
+      proxSub.textContent = `${name} — Live RSSI tracking unavailable`;
     }
-  }catch(e){
-    if(e.name!=='NotFoundError'){
-      $('fmsg').innerHTML='<div class="msg msg-lost">❌ '+esc(e.message)+'</div>';
+
+  } catch(e) {
+    if (e.name === 'NotFoundError') {
+      statusEl.innerHTML = '<div class="status-msg not-found">No device selected (picker was cancelled)</div>';
+    } else {
+      statusEl.innerHTML = `<div class="status-msg not-found">❌ ${esc(e.message)}</div>`;
     }
-    stopFind();
+    stopFinding();
   }
 }
 
-function onAdv(ev){
-  const rssi=ev.rssi; if(rssi==null)return;
-  const d=dist(rssi);
-  const t=now();
-
-  $('dot').setAttribute('data-s','found');
-
-  let label,color;
-  if(d<1){label='📍 Right Here!';color='var(--accent2)';}
-  else if(d<3){label='🟢 Very Close';color='var(--accent2)';}
-  else if(d<8){label='🟡 Getting Closer';color='var(--warn)';}
-  else{label='🔴 Far Away';color='var(--danger)';}
-
-  $('plbl').textContent=label;
-  $('plbl').style.color=color;
-  $('psub').textContent=fmtD(d)+'  ·  '+rssi+' dBm';
-
-  const pct=Math.max(3,Math.min(100,Math.round((1-Math.min(d,15)/15)*100)));
-  $('mfill').style.width=pct+'%';
-  $('mfill').style.background=d<3?'var(--accent2)':d<8?'var(--warn)':'var(--danger)';
-
-  $('i-rssi').textContent=rssi+' dBm';
-  $('i-cond').innerHTML=condText(rssi);
-  $('i-dist').textContent=fmtD(d);
-  $('i-time').textContent=t;
-
-  $('fmsg').innerHTML='<div class="msg msg-found">✅ Device found! Walk around — beeps get faster when closer</div>';
-
-  beepLoop(d);
-
-  // Update allDevices
-  const addr=tracking.id;
-  const idx=allDevices.findIndex(x=>x.address===addr);
-  const entry={name:tracking.name||'(Unknown)',address:addr,rssi,distance:Math.round(d*10)/10,last_seen:t};
-  if(idx>=0)allDevices[idx]=entry; else allDevices.push(entry);
-  updateChips();
+function stopFinding() {
+  if (watchAbortController) {
+    watchAbortController.abort();
+    watchAbortController = null;
+  }
+  if (currentWatchDevice) {
+    currentWatchDevice = null;
+  }
+  document.getElementById('btn-find').style.display = '';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('find-query').disabled = false;
+  document.getElementById('radar-section').style.display = 'none';
+  document.getElementById('find-status').innerHTML = '';
+  document.getElementById('find-results').innerHTML = '';
 }
 
-function stopFind(){
-  if(watchAC){watchAC.abort();watchAC=null;}
-  if(tracking){tracking.removeEventListener('advertisementreceived',onAdv);tracking=null;}
-  clearInterval(beepTmr);
-  $('btn-find').hidden=false;
-  $('btn-stop').hidden=true;
-  $('q').disabled=false;
-  $('radar').removeAttribute('data-on');
-  $('info').removeAttribute('data-on');
-  $('fmsg').innerHTML='';
-  $('plbl').style.color='';
-}
+// ── Device chips ─────────────────────────────────────────────
+function updateChips() {
+  const wrap = document.getElementById('device-chips');
+  const named = knownDevices.filter(d => d.name && d.name !== '(Unknown)');
+  if (named.length === 0) return;
 
-// ── Chips
-function updateChips(){
-  const named=allDevices.filter(d=>d.name&&d.name!=='(Unknown)');
-  if(!named.length)return;
-  const seen=new Set(),unique=[];
-  named.forEach(d=>{if(!seen.has(d.name)){seen.add(d.name);unique.push(d);}});
-  $('chips').innerHTML=unique.slice(0,20).map(d=>
-    `<span class="chip" onclick="$('q').value='${esc(d.name)}';startFind()">${esc(d.name)}</span>`
+  const seen = new Set();
+  const unique = [];
+  named.forEach(d => {
+    if (!seen.has(d.name)) { seen.add(d.name); unique.push(d); }
+  });
+
+  wrap.innerHTML = unique.slice(0, 20).map(d =>
+    `<span class="device-chip" onclick="document.getElementById('find-query').value='${esc(d.name)}';startFinding();">${esc(d.name)}</span>`
   ).join('');
 }
 </script>
+</body>
+</html>
